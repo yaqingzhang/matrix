@@ -182,7 +182,6 @@ public class MMTaskJsonResult extends TaskJsonResult {
         jsonObject.add("entries", items);
     }
 
-
     private static void formatManifestAnalyzeTask(JsonObject jsonObject) {
 
         JsonObject manifest = jsonObject.getAsJsonObject("manifest");
@@ -253,11 +252,12 @@ public class MMTaskJsonResult extends TaskJsonResult {
 
     }
 
-    private static void formatMethodCountTask(JsonObject jsonObject, JsonObject config) {
+    public static void formatMethodCountTask(JsonObject jsonObject, JsonObject config) {
         JsonArray groups = null;
         if (config != null) {
             groups = config.getAsJsonArray("group");
         }
+
         //entries
         Map<String, Integer> defMethodMap = new HashMap<>();
         Map<String, Integer> refMethodMap = new HashMap<>();
@@ -307,277 +307,26 @@ public class MMTaskJsonResult extends TaskJsonResult {
         final Map<String, Pair<Integer, Integer>> groupMap = new HashMap<>();
         final Map<String, Map<String, Pair<Integer, Integer>>> subGroupMaps = new HashMap<>();
         Map<String, String> packageToName = new HashMap<>();
+        packageToName.put("[others]", "[others]");
 
         if (groups != null) {
+
             Map<String, String> groupPattern = new HashMap<>();
-
             ArrayList<String> allPackages = new ArrayList<>();
-            for (JsonElement group : groups) {
-                JsonObject obj = group.getAsJsonObject();
-                String packageName = obj.get("package").getAsString();
-                groupPattern.put(obj.get("name").getAsString(), packageName);
-                if (!allPackages.contains(packageName)) {
-                    allPackages.add(packageName);
-                }
-            }
-
             ArrayList<Map<String, String>> groupPatternsList = new ArrayList<>();
             StringBuilder packageTmp = new StringBuilder();
-            for (Map.Entry<String, String> p : groupPattern.entrySet()) {
 
-
-                String name = p.getKey();
-                String packageName = p.getValue();
-                String[] packageNameSplits = packageName.split("\\.");
-                int packageDepth = 0;
-                packageTmp.delete(0, packageTmp.length());
-
-
-                for (int i = 0; i < packageNameSplits.length - 1; i++) {
-
-                    if (i != 0) packageTmp.append(".");
-                    packageTmp.append(packageNameSplits[i]);
-                    String packageParent = packageTmp.toString();
-                    for (String allPackagesItem : allPackages) {
-                        if (allPackagesItem.equals(packageParent)) {
-                            packageDepth++;
-                            break;
-                        } else {
-                            int index = allPackagesItem.indexOf("$");
-
-                            if (index > 0) {
-                                String fixItem = allPackagesItem.substring(0, index);
-                                if (packageParent.startsWith(fixItem)) {
-                                    packageDepth++;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Map<String, String> groupPatternsDepth = null;
-                int groupPatternsListSize = groupPatternsList.size();
-                if (packageDepth < groupPatternsListSize) {
-                    groupPatternsDepth = groupPatternsList.get(packageDepth);
-                }
-                if (groupPatternsDepth == null) {
-                    groupPatternsDepth = new HashMap<>();
-                    if (packageDepth + 1 > groupPatternsListSize) {
-                        for (int i = 0; i < packageDepth + 1 - groupPatternsListSize; i++) {
-                            groupPatternsList.add(new HashMap<String, String>());
-                        }
-                    }
-
-                    groupPatternsList.set(packageDepth, groupPatternsDepth);
-                } else {
-                }
-                groupPatternsDepth.put(name, packageName);
-            }
+            parseGroupPattern(groups, groupPatternsList, groupPattern, allPackages, packageTmp);
 
             Map<String, Integer> groupDefMap = new HashMap<>();
             Map<String, Integer> groupRefMap = new HashMap<>();
             Map<String, Map<String, Integer>> subGroupDefMap = new HashMap<>();
             Map<String, Map<String, Integer>> subGroupRefMap = new HashMap<>();
 
+            calcMethodMap(allPackages, packageToName, groupPatternsList, packageTmp, defMethodMap, groupDefMap, subGroupDefMap);
 
-            groupDefMap.put("[others]", 0);
-            groupRefMap.put("[others]", 0);
+            calcMethodMap(allPackages, packageToName, groupPatternsList, packageTmp, refMethodMap, groupRefMap, subGroupRefMap);
 
-            for (String pkg : defMethodMap.keySet()) {
-                boolean other = true;
-
-                for (int depth = 0; depth < groupPatternsList.size(); depth++) {
-
-                    Map<String, String> groupPattens = groupPatternsList.get(depth);
-
-                    for (String key : groupPattens.keySet()) {
-                        String groupValue = groupPattens.get(key);
-                        String groupName = key;
-                        String packageKey = groupValue;
-
-                        int index = groupValue.indexOf('$');
-                        if (index >= 0) {
-                            groupValue = groupValue.substring(0, index);
-                        }
-
-                        if (pkg.startsWith(groupValue)) {
-
-                            if (index >= 0) {
-                                groupName = pkg.substring(index);
-                                int nextIndex = groupName.indexOf('.');
-                                if (nextIndex >= 0) {
-                                    groupName = groupName.substring(0, nextIndex);
-                                }
-                                packageKey = packageKey.replace("$", groupName);
-                                groupName = key.replace("$", groupName);
-
-                                allPackages.add(packageKey);
-
-                            }
-
-
-                            if (depth == 0) {
-                                if (!groupDefMap.containsKey(packageKey)) {
-                                    groupDefMap.put(packageKey, defMethodMap.get(pkg));
-                                } else {
-                                    groupDefMap.put(packageKey, groupDefMap.get(packageKey) + defMethodMap.get(pkg));
-                                }
-
-                                packageToName.put(packageKey, groupName);
-
-                            } else {
-
-                                StringBuilder sbPre = new StringBuilder();
-                                for (int i = 0; i < depth; i++) {
-                                    sbPre.append(" - ");
-                                }
-                                String pre = sbPre.toString();
-
-                                Map<String, Integer> groupToFind = null;
-
-
-                                String[] packageNameSplits = packageKey.split("\\.");
-                                String packageParent;
-
-                                for (int i = packageNameSplits.length - 1; i >= 0; i--) {
-
-                                    packageTmp.delete(0, packageTmp.length());
-                                    for (int j = 0; j < i; j++) {
-                                        if (j != 0) packageTmp.append(".");
-                                        packageTmp.append(packageNameSplits[j]);
-                                    }
-                                    packageParent = packageTmp.toString();
-                                    if (allPackages.contains(packageParent)) {
-                                        groupToFind = subGroupDefMap.get(packageParent);
-                                        if (groupToFind == null) {
-                                            groupToFind = new HashMap<>();
-                                            subGroupDefMap.put(packageParent, groupToFind);
-                                        }
-                                        break;
-                                    }
-
-                                }
-
-
-                                groupName = pre + groupName;
-                                if (groupToFind != null) {
-                                    if (!groupToFind.containsKey(packageKey)) {
-                                        groupToFind.put(packageKey, defMethodMap.get(pkg));
-                                    } else {
-                                        groupToFind.put(packageKey, groupToFind.get(packageKey) + defMethodMap.get(pkg));
-                                    }
-                                }
-                                packageToName.put(packageKey, groupName);
-                            }
-                            other = false;
-                        } else {
-                        }
-                    }
-                }
-
-                if (other) {
-                    groupDefMap.put("[others]", groupDefMap.get("[others]") + defMethodMap.get(pkg));
-                }
-
-
-            }
-
-            for (String pkg : refMethodMap.keySet()) {
-                boolean other = true;
-
-
-                for (int depth = 0; depth < groupPatternsList.size(); depth++) {
-
-                    Map<String, String> groupPattens = groupPatternsList.get(depth);
-
-                    for (String key : groupPattens.keySet()) {
-                        String groupValue = groupPattens.get(key);
-                        String groupName = key;
-                        String packageKey = groupValue;
-
-                        int index = groupValue.indexOf('$');
-                        if (index >= 0) {
-                            groupValue = groupValue.substring(0, index);
-                        }
-
-                        if (pkg.startsWith(groupValue)) {
-
-                            if (index >= 0) {
-                                groupName = pkg.substring(index);
-                                int nextIndex = groupName.indexOf('.');
-                                if (nextIndex >= 0) {
-                                    groupName = groupName.substring(0, nextIndex);
-                                }
-                                packageKey = groupValue.replace("$", groupName);
-                                groupName = key.replace("$", groupName);
-
-                                allPackages.add(packageKey);
-                            }
-
-
-                            if (depth == 0) {
-                                if (!groupRefMap.containsKey(packageKey)) {
-                                    groupRefMap.put(packageKey, refMethodMap.get(pkg));
-                                } else {
-                                    groupRefMap.put(packageKey, groupRefMap.get(packageKey) + refMethodMap.get(pkg));
-                                }
-
-                                packageToName.put(packageKey, groupName);
-
-                            } else {
-
-                                StringBuilder sbPre = new StringBuilder();
-                                for (int i = 0; i < depth; i++) {
-                                    sbPre.append(" - ");
-                                }
-                                String pre = sbPre.toString();
-
-                                Map<String, Integer> groupToFind = null;
-
-
-                                String[] packageNameSplits = packageKey.split("\\.");
-                                String packageParent;
-
-                                for (int i = packageNameSplits.length - 1; i >= 0; i--) {
-
-                                    packageTmp.delete(0, packageTmp.length());
-                                    for (int j = 0; j < i; j++) {
-                                        if (j != 0) packageTmp.append(".");
-                                        packageTmp.append(packageNameSplits[j]);
-                                    }
-                                    packageParent = packageTmp.toString();
-                                    if (allPackages.contains(packageParent)) {
-                                        groupToFind = subGroupRefMap.get(packageParent);
-                                        if (groupToFind == null) {
-                                            groupToFind = new HashMap<>();
-                                            subGroupRefMap.put(packageParent, groupToFind);
-                                        }
-                                        break;
-                                    }
-
-                                }
-
-
-                                groupName = pre + groupName;
-                                if (groupToFind != null) {
-                                    if (!groupToFind.containsKey(packageKey)) {
-                                        groupToFind.put(packageKey, refMethodMap.get(pkg));
-                                    } else {
-                                        groupToFind.put(packageKey, groupToFind.get(packageKey) + refMethodMap.get(pkg));
-                                    }
-                                }
-                                packageToName.put(packageKey, groupName);
-
-                            }
-                            other = false;
-                        }
-                    }
-                }
-                if (other) {
-                    groupRefMap.put("[others]", groupRefMap.get("[others]") + refMethodMap.get(pkg));
-                }
-            }
 
             for (String pkg : groupDefMap.keySet()) {
                 groupMap.put(pkg, Pair.of(groupDefMap.get(pkg), groupRefMap.get(pkg)));
@@ -618,6 +367,9 @@ public class MMTaskJsonResult extends TaskJsonResult {
                 groupMap.put(pkg, Pair.of(defMethodMap.get(pkg), refMethodMap.get(pkg)));
             }
         }
+
+
+        // sort output group map only 0 depth
         ArrayList<String> keys = new ArrayList<>(groupMap.keySet());
         Collections.sort(keys, new Comparator<String>() {
             @Override
@@ -641,6 +393,7 @@ public class MMTaskJsonResult extends TaskJsonResult {
 
         jsonObject.remove("dex-files");
 
+        // generate output json and fill sub group children
         long totalMethods = 0;
         JsonArray groupArray = new JsonArray();
         for (String group : keys) {
@@ -657,7 +410,189 @@ public class MMTaskJsonResult extends TaskJsonResult {
         }
 
         jsonObject.addProperty("total-methods", totalMethods);
+
+        long totalMethodsCheck = 0;
+        for (String pkg : defMethodMap.keySet()) {
+            Integer defCount = defMethodMap.get(pkg);
+            if (defCount == null) defCount = 0;
+            Integer refCount = refMethodMap.get(pkg);
+            if (refCount == null) refCount = 0;
+            totalMethodsCheck += (defCount + refCount);
+        }
+        jsonObject.addProperty("total-methods-check", totalMethodsCheck);
+
         jsonObject.add("groups", groupArray);
+    }
+
+    private static void parseGroupPattern(JsonArray groups, ArrayList<Map<String, String>> groupPatternsList, Map<String, String> groupPattern, ArrayList<String> allPackages, StringBuilder packageTmp) {
+        for (JsonElement group : groups) {
+            JsonObject obj = group.getAsJsonObject();
+            String packageName = obj.get("package").getAsString();
+            groupPattern.put(obj.get("name").getAsString(), packageName);
+            if (!allPackages.contains(packageName)) {
+                allPackages.add(packageName);
+            }
+        }
+
+
+        for (Map.Entry<String, String> p : groupPattern.entrySet()) {
+
+
+            String name = p.getKey();
+            String packageName = p.getValue();
+            String[] packageNameSplits = packageName.split("\\.");
+            int packageDepth = 0;
+            packageTmp.delete(0, packageTmp.length());
+
+
+            for (int i = 0; i < packageNameSplits.length - 1; i++) {
+
+                if (i != 0) packageTmp.append(".");
+                packageTmp.append(packageNameSplits[i]);
+                String packageParent = packageTmp.toString();
+                for (String allPackagesItem : allPackages) {
+                    if (allPackagesItem.equals(packageParent)) {
+                        packageDepth++;
+                        break;
+                    } else {
+                        int index = allPackagesItem.indexOf("$");
+
+                        if (index > 0) {
+                            String fixItem = allPackagesItem.substring(0, index);
+                            if (packageParent.startsWith(fixItem)) {
+                                packageDepth++;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Map<String, String> groupPatternsDepth = null;
+            int groupPatternsListSize = groupPatternsList.size();
+            if (packageDepth < groupPatternsListSize) {
+                groupPatternsDepth = groupPatternsList.get(packageDepth);
+            }
+            if (groupPatternsDepth == null) {
+                groupPatternsDepth = new HashMap<>();
+                if (packageDepth + 1 > groupPatternsListSize) {
+                    for (int i = 0; i < packageDepth + 1 - groupPatternsListSize; i++) {
+                        groupPatternsList.add(new HashMap<String, String>());
+                    }
+                }
+
+                groupPatternsList.set(packageDepth, groupPatternsDepth);
+            } else {
+            }
+            groupPatternsDepth.put(name, packageName);
+        }
+    }
+
+    private static void calcMethodMap(ArrayList<String> allPackages, Map<String, String> packageToName, ArrayList<Map<String, String>> groupPatternsList, StringBuilder packageTmp, Map<String, Integer> defMethodMap, Map<String, Integer> groupDefMap, Map<String, Map<String, Integer>> subGroupDefMap) {
+
+        groupDefMap.put("[others]", 0);
+
+        for (String pkg : defMethodMap.keySet()) {
+            boolean other = true;
+
+            for (int depth = 0; depth < groupPatternsList.size(); depth++) {
+
+                Map<String, String> groupPattens = groupPatternsList.get(depth);
+
+                for (String key : groupPattens.keySet()) {
+                    String groupValue = groupPattens.get(key);
+                    String groupName = key;
+                    String packageKey = groupValue;
+
+                    int index = groupValue.indexOf('$');
+                    if (index >= 0) {
+                        groupValue = groupValue.substring(0, index);
+                    }
+
+                    String groupValueWithDot = groupValue + ".";
+
+                    if ((index >= 0 && pkg.startsWith(groupValue))
+                            || (pkg.equals(groupValue) || pkg.startsWith(groupValueWithDot))) {
+
+                        if (index >= 0) {
+                            groupName = pkg.substring(index);
+                            int nextIndex = groupName.indexOf('.');
+                            if (nextIndex >= 0) {
+                                groupName = groupName.substring(0, nextIndex);
+                            }
+                            packageKey = packageKey.replace("$", groupName);
+                            groupName = key.replace("$", groupName);
+
+                            allPackages.add(packageKey);
+
+                        }
+
+
+                        if (depth == 0) {
+                            if (!groupDefMap.containsKey(packageKey)) {
+                                groupDefMap.put(packageKey, defMethodMap.get(pkg));
+                            } else {
+                                groupDefMap.put(packageKey, groupDefMap.get(packageKey) + defMethodMap.get(pkg));
+                            }
+
+                            packageToName.put(packageKey, groupName);
+
+                        } else {
+
+                            StringBuilder sbPre = new StringBuilder();
+                            for (int i = 0; i < depth; i++) {
+                                sbPre.append(" - ");
+                            }
+                            String pre = sbPre.toString();
+
+                            Map<String, Integer> groupToFind = null;
+
+
+                            String[] packageNameSplits = packageKey.split("\\.");
+                            String packageParent;
+
+                            for (int i = packageNameSplits.length - 1; i >= 0; i--) {
+
+                                packageTmp.delete(0, packageTmp.length());
+                                for (int j = 0; j < i; j++) {
+                                    if (j != 0) packageTmp.append(".");
+                                    packageTmp.append(packageNameSplits[j]);
+                                }
+                                packageParent = packageTmp.toString();
+                                if (allPackages.contains(packageParent)) {
+                                    groupToFind = subGroupDefMap.get(packageParent);
+                                    if (groupToFind == null) {
+                                        groupToFind = new HashMap<>();
+                                        subGroupDefMap.put(packageParent, groupToFind);
+                                    }
+                                    break;
+                                }
+
+                            }
+
+
+                            groupName = pre + groupName;
+                            if (groupToFind != null) {
+                                if (!groupToFind.containsKey(packageKey)) {
+                                    groupToFind.put(packageKey, defMethodMap.get(pkg));
+                                } else {
+                                    groupToFind.put(packageKey, groupToFind.get(packageKey) + defMethodMap.get(pkg));
+                                }
+                            }
+                            packageToName.put(packageKey, groupName);
+                        }
+                        other = false;
+                    } else {
+                    }
+                }
+            }
+
+            if (other) {
+                groupDefMap.put("[others]", groupDefMap.get("[others]") + defMethodMap.get(pkg));
+            }
+
+
+        }
     }
 
     private static void fillChildrenToJsonArray(
