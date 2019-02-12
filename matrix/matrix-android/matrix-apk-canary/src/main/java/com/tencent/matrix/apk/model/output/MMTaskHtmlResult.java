@@ -22,6 +22,7 @@ import com.google.gson.JsonObject;
 import com.tencent.matrix.apk.model.result.TaskHtmlResult;
 import com.tencent.matrix.apk.model.task.TaskFactory;
 import com.tencent.matrix.javalib.util.Util;
+
 import org.w3c.dom.Element;
 
 import java.util.Map;
@@ -170,7 +171,13 @@ public class MMTaskHtmlResult extends TaskHtmlResult {
             Element td1 = document.createElement("td");
             td1.setTextContent("taskDescription");
             Element td2 = document.createElement("td");
-            td2.setTextContent(jsonObject.get("taskDescription").getAsString());
+            String taskDescription = "taskDescription::UnKnown";
+            try {
+                taskDescription = jsonObject.get("taskDescription").getAsString();
+            } catch (Throwable e) {
+
+            }
+            td2.setTextContent(taskDescription);
             tr.appendChild(td1);
             tr.appendChild(td2);
             table.appendChild(tr);
@@ -191,7 +198,12 @@ public class MMTaskHtmlResult extends TaskHtmlResult {
         {
             JsonArray files = jsonObject.getAsJsonArray("entries");
             for (JsonElement file : files) {
-                final String suffix = ((JsonObject) file).get("suffix").getAsString();
+                String suffix = "suffix::UnKnown";
+                try {
+                    suffix = ((JsonObject) file).get("suffix").getAsString();
+                } catch (Throwable e) {
+
+                }
                 final long size = ((JsonObject) file).get("total-size").getAsLong();
 
                 Element tr = document.createElement("tr");
@@ -424,9 +436,22 @@ public class MMTaskHtmlResult extends TaskHtmlResult {
                 JsonObject object = (JsonObject) entry;
                 Element tr = document.createElement("tr");
                 Element td1 = document.createElement("td");
-                td1.setTextContent(object.get("name").getAsString());
+                String name = "name::UnKnown";
+                try {
+                    name = object.get("name").getAsString();
+                } catch (Throwable e) {
+
+                }
+                td1.setTextContent(name);
                 Element td2 = document.createElement("td");
-                td2.setTextContent(object.get("method-count").getAsString());
+
+                String methodCount = "method-count::UnKnown";
+                try {
+                    methodCount = object.get("method-count").getAsString();
+                } catch (Throwable e) {
+
+                }
+                td2.setTextContent(methodCount);
                 tr.appendChild(td1);
                 tr.appendChild(td2);
                 table.appendChild(tr);
